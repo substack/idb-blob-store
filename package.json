@@ -6,9 +6,9 @@
   "dependencies": {
     "block-stream2": "^1.0.0",
     "inherits": "^2.0.1",
-    "lexicographic-integer": "~1.1.0",
+    "lexicographic-integer": "^1.1.0",
     "read-only-stream": "^1.1.1",
-    "readable-stream": "~1.0.33",
+    "readable-stream": "^1.0.33",
     "through2": "~0.6.3",
     "write-only-stream": "^1.1.0"
   },
