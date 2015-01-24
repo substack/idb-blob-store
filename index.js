@@ -37,53 +37,60 @@ function IDB (opts) {
     });
 }
 
+IDB.prototype._put = function (key, value, cb) {
+    var self = this;
+    if (!self.db) {
+        return self.once('ready', function () {
+            self._put(key, value, cb);
+        });
+    }
+    var trans = self.db.transaction(['blobs'], 'readwrite');
+    var store = trans.objectStore('blobs');
+    trans.addEventListener('complete', function () { cb(null) });
+    trans.addEventListener('error', function (err) { cb(err) });
+    store.put(key, value);
+};
+
 IDB.prototype.createWriteStream = function (opts, cb) {
     var self = this;
     if (!opts) opts = {};
     
-    var op = self.db.transaction(['blobs'], 'readwrite');
-    var store = op.objectStore('blobs');
     var pending = 1;
-    
     var key = opts.key;
     var size = opts.size || 1024 * 16;
     var pos = 0;
     
-    var block = new Block(size);
+    var block = new Block(size, { nopad: true });
     block.pipe(through(write, end));
     var w = writeonly(block);
     if (cb) w.once('error', cb);
-    w.once('error', function () { op.abort() });
     return w;
     
     function write (buf, enc, next) {
-        var r = store.put(buf, key + '!' + pos);
         pending ++;
-        r.addEventListener('success', function () {
-            if (-- pending === 0) done();
-        });
-        r.addEventListener('error', function (err) {
-            w.emit('error', err);
+        self._put(buf, key + '!' + pos, function (err) {
+            if (err) w.emit('error', err)
+            else if (-- pending === 0) done()
         });
         pos += buf.length;
         next();
     }
     
     function end () {
-        var r = store.put({ size: size, length: pos }, key + '!');
-        r.addEventListener('success', function () {
-            if (-- pending === 0) done();
-        });
-        r.addEventListener('error', function (err) {
-            w.emit('error', err);
+        self._put({ size: size, length: pos }, key + '!', function (err) {
+            if (err) w.emit('error', err)
+            else if (-- pending === 0) done()
         });
     }
+    
+    function done () { if (cb) cb(null) }
 };
 
 IDB.prototype.createReadStream = function (opts) {
+    var self = this;
     if (typeof opts === 'string') opts = { key: opts };
-    var op = self.db.transaction(['blobs'],'read');
-    var store = op.objectStore('blobs');
+    var trans = self.db.transaction(['blobs'],'readonly')
+    var store = trans.objectStore('blobs');
     
     var r = new Readable;
     r._reading = false;
@@ -103,10 +110,18 @@ IDB.prototype.createReadStream = function (opts) {
     var range = IDBKeyRange.bound(gt, lt, false, true); // >, <=
     
     var cur = store.openCursor(range);
+    var first = true;
+    var meta = null;
+    
     cur.addEventListener('success', function (ev) {
         var cursor = ev.target.result;
-        if (cursor) {
-            r.push(cursor.value);
+        if (first && cursor) {
+            first = false;
+            meta = cursor.value;
+            cursor.continue();
+        }
+        else if (cursor) {
+            r.push(Buffer(cursor.value));
             if (r._reading) cursor.continue();
             else r._waiting = function () { cursor.continue() };
         }
