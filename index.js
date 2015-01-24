@@ -6,6 +6,7 @@ var Block = require('block-stream');
 var Readable = require('readable-stream').Readable;
 var through = require('through2');
 var writeonly = require('write-only-stream');
+var pack = require('lexicographic-integer').pack;
 
 var idb = window.indexedDB || window.mozIndexedDB
     || window.webkitIndexedDB || window.msIndexedDB
@@ -68,7 +69,7 @@ IDB.prototype.createWriteStream = function (opts, cb) {
     
     function write (buf, enc, next) {
         pending ++;
-        self._put(buf, key + '!' + pos, function (err) {
+        self._put(buf, key + '!' + pack(pos, 'hex'), function (err) {
             if (err) w.emit('error', err)
             else if (-- pending === 0) done()
         });
