@@ -90,7 +90,7 @@ IDB.prototype.createWriteStream = function (opts, cb) {
 IDB.prototype.createReadStream = function (opts) {
     var self = this;
     if (typeof opts === 'string') opts = { key: opts };
-    var trans = self.db.transaction(['blobs'],'readonly')
+    var trans = self.db.transaction(['blobs'], 'readonly')
     var store = trans.objectStore('blobs');
     
     var r = new Readable;
@@ -114,7 +114,9 @@ IDB.prototype.createReadStream = function (opts) {
     var first = true;
     var meta = null;
     
-    cur.addEventListener('success', function (ev) {
+    backify(cur, function (err, ev) {
+        if (err) return r.emit('error', err);
+        
         var cursor = ev.target.result;
         if (first && cursor) {
             first = false;
@@ -127,16 +129,56 @@ IDB.prototype.createReadStream = function (opts) {
             else r._waiting = function () { cursor.continue() };
         }
         else r.push(null);
-        
-    });
-    cur.addEventListener('error', function (err) {
-        r.emit('error', err);
     });
     return r;
 };
 
 IDB.prototype.exists = function (opts, cb) {
+    var self = this;
+    if (typeof opts === 'string') opts = { key: opts };
+    var trans = self.db.transaction(['blobs'], 'readonly');
+    
+    var range = IDBKeyRange.only(opts.key + '!');
+    var store = trans.objectStore('blobs');
+    
+    backify(store.openCursor(range), function (err, ev) {
+        if (err) cb(err)
+        else if (ev.target.result) cb(null, true)
+        else cb(null, false)
+    });
 };
 
 IDB.prototype.remove = function (opts, cb) {
+    var self = this;
+    if (typeof opts === 'string') opts = { key: opts };
+    var trans = self.db.transaction(['blobs'], 'readonly')
+    var store = trans.objectStore('blobs');
+    var pending = 1;
+    var key = opts.key;
+    
+    backify(store.get(key + '!'), function (err, ev) {
+        if (err) return cb(err);
+        
+        var value = ev.target.result;
+        var trans = self.db.transaction(['blobs'],'readwrite');
+        var store = trans.objectStore('blobs');
+        backify(store.delete(key + '!'), callback);
+        
+        var max = Math.ceil(value.length / value.size) * value.size;
+        for (var i = 0; i < max; i += value.size) {
+            var ikey = key + '!' + pack(i, 'hex');
+            console.log('ikey=', ikey);
+            pending ++;
+            backify(store.delete(ikey), callback);
+        }
+        function callback (err) {
+            if (err) { cb(err); cb = function () {} }
+            else if (-- pending === 0) cb(null);
+        }
+    });
 };
+
+function backify (r, cb) {
+    r.addEventListener('success', function (ev) { cb(null, ev) });
+    r.addEventListener('error', function (err) { cb(err) });
+}
