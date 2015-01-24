@@ -2,11 +2,11 @@ module.exports = IDB;
 
 var EventEmitter = require('events').EventEmitter;
 var inherits = require('inherits');
-var Block = require('block-stream');
-var Readable = require('readable-stream').Readable;
 var through = require('through2');
 var writeonly = require('write-only-stream');
 var pack = require('lexicographic-integer').pack;
+var Block = require('block-stream2');
+var Readable = require('readable-stream').Readable;
 
 var idb = window.indexedDB || window.mozIndexedDB
     || window.webkitIndexedDB || window.msIndexedDB
@@ -49,7 +49,7 @@ IDB.prototype._put = function (key, value, cb) {
     var store = trans.objectStore('blobs');
     trans.addEventListener('complete', function () { cb(null) });
     trans.addEventListener('error', function (err) { cb(err) });
-    store.put(key, value);
+    store.put(value, key);
 };
 
 IDB.prototype.createWriteStream = function (opts, cb) {
@@ -62,14 +62,27 @@ IDB.prototype.createWriteStream = function (opts, cb) {
     var pos = 0;
     
     var block = new Block(size, { nopad: true });
-    block.pipe(through(write, end));
+    
+    self.exists(key, function (err, ex) {
+        if (err) return cb(err);
+        else if (ex) self.remove(key, function (err) {
+            if (err) cb(err)
+            else ready()
+        })
+        else ready()
+    });
+    
+    function ready () {
+        block.pipe(through(write, end));
+    }
+    
     var w = writeonly(block);
     if (cb) w.once('error', cb);
     return w;
     
     function write (buf, enc, next) {
         pending ++;
-        self._put(buf, key + '!' + pack(pos, 'hex'), function (err) {
+        self._put(key + '!' + pack(pos, 'hex'), buf, function (err) {
             if (err) w.emit('error', err)
             else if (-- pending === 0) done()
         });
@@ -78,7 +91,7 @@ IDB.prototype.createWriteStream = function (opts, cb) {
     }
     
     function end () {
-        self._put({ size: size, length: pos }, key + '!', function (err) {
+        self._put(key + '!', { size: size, length: pos }, function (err) {
             if (err) w.emit('error', err)
             else if (-- pending === 0) done()
         });
@@ -108,7 +121,7 @@ IDB.prototype.createReadStream = function (opts) {
     var key = opts.key;
     var gt = key + '!';
     var lt = key + '!~';
-    var range = IDBKeyRange.bound(gt, lt, false, true); // >, <=
+    var range = IDBKeyRange.bound(gt, lt, false, true);
     
     var cur = store.openCursor(range);
     var first = true;
@@ -167,7 +180,6 @@ IDB.prototype.remove = function (opts, cb) {
         var max = Math.ceil(value.length / value.size) * value.size;
         for (var i = 0; i < max; i += value.size) {
             var ikey = key + '!' + pack(i, 'hex');
-            console.log('ikey=', ikey);
             pending ++;
             backify(store.delete(ikey), callback);
         }
