@@ -4,6 +4,7 @@ var EventEmitter = require('events').EventEmitter;
 var inherits = require('inherits');
 var through = require('through2');
 var writeonly = require('write-only-stream');
+var readonly = require('read-only-stream');
 var pack = require('lexicographic-integer').pack;
 var Block = require('block-stream2');
 var Readable = require('readable-stream').Readable;
@@ -77,6 +78,7 @@ IDB.prototype.createWriteStream = function (opts, cb) {
     }
     
     var w = writeonly(block);
+    w.key = key;
     if (cb) w.once('error', cb);
     return w;
     
@@ -97,12 +99,22 @@ IDB.prototype.createWriteStream = function (opts, cb) {
         });
     }
     
-    function done () { if (cb) cb(null) }
+    function done () {
+        if (cb) cb(null, { key: key, size: pos })
+    }
 };
 
 IDB.prototype.createReadStream = function (opts) {
     var self = this;
+    if (!self.db) {
+        var waiting = through();
+        self.once('ready', function () {
+            self.createReadStream(opts).pipe(waiting);
+        });
+        return readonly(waiting);
+    }
     if (typeof opts === 'string') opts = { key: opts };
+    if (!opts) opts = {};
     var trans = self.db.transaction(['blobs'], 'readonly')
     var store = trans.objectStore('blobs');
     
@@ -148,7 +160,15 @@ IDB.prototype.createReadStream = function (opts) {
 
 IDB.prototype.exists = function (opts, cb) {
     var self = this;
+    if (!self.db) {
+        return self.once('ready', function () {
+            self.exists(opts, cb);
+        });
+    }
+    if (!cb) cb = function () {};
+    
     if (typeof opts === 'string') opts = { key: opts };
+    if (!opts) opts = {};
     var trans = self.db.transaction(['blobs'], 'readonly');
     
     var range = IDBKeyRange.only(opts.key + '!');
@@ -163,7 +183,14 @@ IDB.prototype.exists = function (opts, cb) {
 
 IDB.prototype.remove = function (opts, cb) {
     var self = this;
+    if (!self.db) {
+        return self.once('ready', function () {
+            self.remove(opts, cb);
+        });
+    }
+    
     if (typeof opts === 'string') opts = { key: opts };
+    if (!opts) opts = {};
     var trans = self.db.transaction(['blobs'], 'readonly')
     var store = trans.objectStore('blobs');
     var pending = 1;
@@ -185,7 +212,7 @@ IDB.prototype.remove = function (opts, cb) {
         }
         function callback (err) {
             if (err) { cb(err); cb = function () {} }
-            else if (-- pending === 0) cb(null);
+            else if (-- pending === 0 && cb) cb(null);
         }
     });
 };
