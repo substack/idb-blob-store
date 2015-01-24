@@ -41,8 +41,8 @@ IDB.prototype.createWriteStream = function (opts, cb) {
     var self = this;
     if (!opts) opts = {};
     
-    var op = self.db.transaction(['blobs'], 'write');
-    var store = op.objectStore;
+    var op = self.db.transaction(['blobs'], 'readwrite');
+    var store = op.objectStore('blobs');
     var pending = 1;
     
     var key = opts.key;
@@ -83,7 +83,7 @@ IDB.prototype.createWriteStream = function (opts, cb) {
 IDB.prototype.createReadStream = function (opts) {
     if (typeof opts === 'string') opts = { key: opts };
     var op = self.db.transaction(['blobs'],'read');
-    var store = op.objectStore;
+    var store = op.objectStore('blobs');
     
     var r = new Readable;
     r._reading = false;
