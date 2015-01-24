@@ -56,11 +56,12 @@ IDB.prototype._put = function (key, value, cb) {
 IDB.prototype.createWriteStream = function (opts, cb) {
     var self = this;
     if (!opts) opts = {};
+    if (typeof opts === 'string') opts = { key: opts };
     
-    var pending = 1;
-    var key = opts.key;
+    var key = opts.key || 'undefined';
     var size = opts.size || 1024 * 16;
     var pos = 0;
+    var pending = 1;
     
     var block = new Block(size, { nopad: true });
     
@@ -200,6 +201,7 @@ IDB.prototype.remove = function (opts, cb) {
         if (err) return cb(err);
         
         var value = ev.target.result;
+        if (!value) return cb(null, new Error('not found'));
         var trans = self.db.transaction(['blobs'],'readwrite');
         var store = trans.objectStore('blobs');
         backify(store.delete(key + '!'), callback);
