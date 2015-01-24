@@ -2,6 +2,8 @@
 
 abstract-blob-store compatible IndexedDB wrapper
 
+[![blob-store-compatible](https://raw.githubusercontent.com/maxogden/abstract-blob-store/master/badge.png)](https://github.com/maxogden/abstract-blob-store)
+
 # example
 
 ``` js
