@@ -1,6 +1,6 @@
 {
   "name": "idb-blob-store",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "description": "chunked blob store on top of IndexedDB",
   "main": "index.js",
   "dependencies": {
