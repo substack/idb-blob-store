@@ -53,10 +53,21 @@ IDB.prototype._store = function (mode, cb) {
 
 IDB.prototype._put = function (key, value, cb) {
     this._store('readwrite', function (err, store) {
-        if (err) cb(err)
-        else backify(store.put(value, key), cb)
+        if (err) return cb(err);
+        backify(store.put(value, key), wait(store, cb));
     });
 };
+
+function wait (store, cb) {
+    var pending = 2;
+    store.transaction.addEventListener('complete', done);
+    return function (err) {
+        if (err) cb(err)
+        else done()
+    };
+    function done () { if (-- pending === 0) cb(null) }
+}
+
 
 IDB.prototype._get = function (key, cb) {
     this._store('readonly', function (err, store) {
@@ -71,7 +82,7 @@ IDB.prototype._get = function (key, cb) {
 IDB.prototype._del = function (key, cb) {
     this._store('readwrite', function (err, store) {
         if (err) cb(err)
-        else backify(store.delete(key), cb);
+        else backify(store.delete(key), wait(store, cb));
     });
 };
 
