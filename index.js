@@ -5,6 +5,7 @@ var inherits = require('inherits');
 var through = require('through2');
 var writeonly = require('write-only-stream');
 var readonly = require('read-only-stream');
+var defined = require('defined');
 var pack = require('lexicographic-integer').pack;
 var Block = require('block-stream2');
 var Readable = require('readable-stream').Readable;
@@ -76,7 +77,7 @@ IDB.prototype.createWriteStream = function (opts, cb) {
     if (!opts) opts = {};
     if (typeof opts === 'string') opts = { key: opts };
     
-    var key = opts.key || 'undefined';
+    var key = defined(opts.key, 'undefined');
     var size = opts.size || 1024 * 16;
     var pos = 0;
     var pending = 1;
@@ -125,54 +126,26 @@ IDB.prototype.createWriteStream = function (opts, cb) {
 
 IDB.prototype.createReadStream = function (opts) {
     var self = this;
-    if (!self.db) {
-        var waiting = through();
-        self.once('ready', function () {
-            self.createReadStream(opts).pipe(waiting);
-        });
-        return readonly(waiting);
-    }
+    var r = new Readable;
+    var cursor;
+    r._read = function () { if (cursor) cursor.continue() };
+    
     if (typeof opts === 'string') opts = { key: opts };
     if (!opts) opts = {};
-    var trans = self.db.transaction(['blobs'], 'readonly')
-    var store = trans.objectStore('blobs');
     
-    var r = new Readable;
-    r._reading = false;
-    r._read = function () {
-        if (r._waiting) {
-            r._reading = false;
-            var f = r._waiting;
-            r._waiting = null;
-            f();
-        }
-        else r._reading = true;
-    };
+    var key = defined(opts.key, 'undefined');
+    var range = IDBKeyRange.bound(key + '!0', key + '!~', true, true);
     
-    var key = opts.key;
-    var gt = key + '!';
-    var lt = key + '!~';
-    var range = IDBKeyRange.bound(gt, lt, false, true);
-    
-    var cur = store.openCursor(range);
-    var first = true;
-    var meta = null;
-    
-    backify(cur, function (err, ev) {
+    self._store('readonly', function (err, store) {
         if (err) return r.emit('error', err);
+        var cur = store.openCursor(range);
         
-        var cursor = ev.target.result;
-        if (first && cursor) {
-            first = false;
-            meta = cursor.value;
-            cursor.continue();
-        }
-        else if (cursor) {
-            r.push(Buffer(cursor.value));
-            if (r._reading) cursor.continue();
-            else r._waiting = function () { cursor.continue() };
-        }
-        else r.push(null);
+        backify(cur, function (err, ev) {
+            if (err) return r.emit('error', err)
+            cursor = ev.target.result;
+            if (cursor) r.push(Buffer(cursor.value))
+            else r.push(null)
+        });
     });
     return r;
 };
