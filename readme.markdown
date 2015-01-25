@@ -48,6 +48,28 @@ Check if `opts.key` exists with `cb(err, exists)`.
 
 Remove the key at `opts.key`.
 
+# internal methods
+
+These internal methods are intended to be used by wrapper modules and will track
+in semver. User code should probably not use these.
+
+## blob.\_store(mode, cb)
+
+Create a transaction in `mode` (`'readonly'` or `'readwrite'`), returning the
+objectStore in `cb(err, store)`.
+
+## blob.\_put(key, value, cb)
+
+Put a `key` with a `value`.
+
+## blob.\_get(key, cb)
+
+Get the value of some `key` in `cb(err, value)`.
+
+## blob.\_del(key, cb)
+
+Remove the value at `key`.
+
 # license
 
 MIT
