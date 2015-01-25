@@ -29,9 +29,7 @@ function IDB (opts) {
     var request = indexedDB.open(opts.name);
     request.addEventListener('upgradeneeded', function () {
         var db = request.result;
-        var store = db.createObjectStore('blobs');
-        self.db = db;
-        self.emit('ready');
+        db.createObjectStore('blobs'); 
     });
     request.addEventListener('success', function () {
         self.db = request.result;
@@ -39,18 +37,38 @@ function IDB (opts) {
     });
 }
 
-IDB.prototype._put = function (key, value, cb) {
+IDB.prototype._store = function (mode, cb) {
     var self = this;
-    if (!self.db) {
-        return self.once('ready', function () {
-            self._put(key, value, cb);
-        });
+    if (!self.db) return self.once('ready', ready);
+    else process.nextTick(ready)
+    
+    function ready () {
+        var trans = self.db.transaction(['blobs'], mode);
+        var store = trans.objectStore('blobs');
+        trans.addEventListener('error', function (err) { cb(err) });
+        cb(null, store)
     }
-    var trans = self.db.transaction(['blobs'], 'readwrite');
-    var store = trans.objectStore('blobs');
-    trans.addEventListener('complete', function () { cb(null) });
-    trans.addEventListener('error', function (err) { cb(err) });
-    store.put(value, key);
+};
+
+IDB.prototype._put = function (key, value, cb) {
+    this._store('readwrite', function (err, store) {
+        if (err) cb(err)
+        else backify(store.put(value, key), cb)
+    });
+};
+
+IDB.prototype._get = function (key, cb) {
+    this._store('readonly', function (err, store) {
+        if (err) cb(err)
+        else backify(store.get(key), cb);
+    });
+};
+
+IDB.prototype._del = function (key, cb) {
+    this._store('readwrite', function (err, store) {
+        if (err) cb(err)
+        else backify(store.delete(key), cb);
+    });
 };
 
 IDB.prototype.createWriteStream = function (opts, cb) {
@@ -161,56 +179,40 @@ IDB.prototype.createReadStream = function (opts) {
 
 IDB.prototype.exists = function (opts, cb) {
     var self = this;
-    if (!self.db) {
-        return self.once('ready', function () {
-            self.exists(opts, cb);
-        });
-    }
     if (!cb) cb = function () {};
-    
     if (typeof opts === 'string') opts = { key: opts };
     if (!opts) opts = {};
-    var trans = self.db.transaction(['blobs'], 'readonly');
-    
     var range = IDBKeyRange.only(opts.key + '!');
-    var store = trans.objectStore('blobs');
     
-    backify(store.openCursor(range), function (err, ev) {
-        if (err) cb(err)
-        else if (ev.target.result) cb(null, true)
-        else cb(null, false)
+    self._store('readonly', function (err, store) {
+        if (err) return cb(err);
+        backify(store.openCursor(range), function (err, ev) {
+            if (err) cb(err)
+            else if (ev.target.result) cb(null, true)
+            else cb(null, false)
+        });
     });
 };
 
 IDB.prototype.remove = function (opts, cb) {
     var self = this;
-    if (!self.db) {
-        return self.once('ready', function () {
-            self.remove(opts, cb);
-        });
-    }
-    
     if (typeof opts === 'string') opts = { key: opts };
     if (!opts) opts = {};
-    var trans = self.db.transaction(['blobs'], 'readonly')
-    var store = trans.objectStore('blobs');
     var pending = 1;
     var key = opts.key;
     
-    backify(store.get(key + '!'), function (err, ev) {
+    self._get(key + '!', function (err, ev) {
         if (err) return cb(err);
         
         var value = ev.target.result;
         if (!value) return cb(null, new Error('not found'));
-        var trans = self.db.transaction(['blobs'],'readwrite');
-        var store = trans.objectStore('blobs');
-        backify(store.delete(key + '!'), callback);
+        self._del(key + '!', callback);
         
         var max = Math.ceil(value.length / value.size) * value.size;
         for (var i = 0; i < max; i += value.size) {
             var ikey = key + '!' + pack(i, 'hex');
             pending ++;
-            backify(store.delete(ikey), callback);
+            self._del(ikey, callback);
         }
         function callback (err) {
             if (err) { cb(err); cb = function () {} }
