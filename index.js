@@ -142,12 +142,19 @@ IDB.prototype.createReadStream = function (opts) {
     self._store('readonly', function (err, store) {
         if (err) return r.emit('error', err);
         var cur = store.openCursor(range);
+        var times = 0;
         
         backify(cur, function (err, ev) {
             if (err) return r.emit('error', err)
             cursor = ev.target.result;
-            if (cursor) r.push(Buffer(cursor.value))
+            if (times === 0 && !cursor) {
+                r.emit('error', new Error('key not found: ' + key));
+            }
+            else if (cursor) {
+                r.push(Buffer(cursor.value));
+            }
             else r.push(null)
+            times ++;
         });
     });
     return r;
