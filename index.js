@@ -61,7 +61,10 @@ IDB.prototype._put = function (key, value, cb) {
 IDB.prototype._get = function (key, cb) {
     this._store('readonly', function (err, store) {
         if (err) cb(err)
-        else backify(store.get(key), cb);
+        else backify(store.get(key), function (err, ev) {
+            if (err) cb(err)
+            else cb(null, ev.target.result)
+        });
     });
 };
 
@@ -174,10 +177,8 @@ IDB.prototype.remove = function (opts, cb) {
     var pending = 1;
     var key = opts.key;
     
-    self._get(key + '!', function (err, ev) {
+    self._get(key + '!', function (err, value) {
         if (err) return cb(err);
-        
-        var value = ev.target.result;
         if (!value) return cb(null, new Error('not found'));
         self._del(key + '!', callback);
         
