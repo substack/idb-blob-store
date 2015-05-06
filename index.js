@@ -27,7 +27,7 @@ function IDB (opts) {
     self._ready = false;
     if (!opts.name) opts.name = 'idb-blob-store';
     
-    var request = indexedDB.open(opts.name);
+    var request = idb.open(opts.name);
     request.addEventListener('upgradeneeded', function () {
         var db = request.result;
         db.createObjectStore('blobs'); 
