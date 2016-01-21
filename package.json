@@ -18,7 +18,7 @@
     "tape": "^4.2.2"
   },
   "scripts": {
-    "test": "tape test/*.js"
+    "test": "browserify test/abstract.js | scat"
   },
   "repository": {
     "type": "git",
