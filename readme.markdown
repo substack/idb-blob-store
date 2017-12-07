@@ -26,9 +26,11 @@ function readback () {
 var store = require('idb-blob-store')
 ```
 
-## var blob = store()
+## var blob = store(opts)
 
 Create a new blob store.
+
+`opts.indexedDB` and `opts.IDBKeyRange` both default to respective browser implementations.
 
 ## blob.createWriteStream(opts, cb)
 

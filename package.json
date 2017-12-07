@@ -15,6 +15,7 @@
   },
   "devDependencies": {
     "abstract-blob-store": "~3.2.0",
+    "fake-indexeddb": "^2.0.3",
     "tape": "^4.2.2"
   },
   "scripts": {

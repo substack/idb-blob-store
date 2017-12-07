@@ -10,10 +10,6 @@ var pack = require('lexicographic-integer').pack;
 var Block = require('block-stream2');
 var Readable = require('readable-stream').Readable;
 
-var idb = window.indexedDB || window.mozIndexedDB
-    || window.webkitIndexedDB || window.msIndexedDB
-;
-
 module.exports = IDB;
 inherits(IDB, EventEmitter);
 
@@ -26,8 +22,12 @@ function IDB (opts) {
     if (!opts) opts = {};
     self._ready = false;
     if (!opts.name) opts.name = 'idb-blob-store';
-    
-    var request = idb.open(opts.name);
+    self.indexedDB = opts.indexedDB || window.indexedDB || window.mozIndexedDB
+        || window.webkitIndexedDB || window.msIndexedDB
+    ;
+    self.IDBKeyRange = opts.IDBKeyRange || window.IDBKeyRange;
+
+    var request = self.indexedDB.open(opts.name);
     request.addEventListener('upgradeneeded', function () {
         var db = request.result;
         db.createObjectStore('blobs'); 
@@ -148,7 +148,7 @@ IDB.prototype.createReadStream = function (opts) {
     if (!opts) opts = {};
     
     var key = defined(opts.key, 'undefined');
-    var range = IDBKeyRange.bound(key + '!0', key + '!~', true, true);
+    var range = self.IDBKeyRange.bound(key + '!0', key + '!~', true, true);
     
     self._store('readonly', function (err, store) {
         if (err) return r.emit('error', err);
@@ -176,7 +176,7 @@ IDB.prototype.exists = function (opts, cb) {
     if (!cb) cb = function () {};
     if (typeof opts === 'string') opts = { key: opts };
     if (!opts) opts = {};
-    var range = IDBKeyRange.only(opts.key + '!');
+    var range = self.IDBKeyRange.only(opts.key + '!');
     
     self._store('readonly', function (err, store) {
         if (err) return cb(err);
