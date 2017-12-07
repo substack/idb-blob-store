@@ -30,6 +30,7 @@ var store = require('idb-blob-store')
 
 Create a new blob store.
 
+`opts.name` defaults to `idb-blob-store`.
 `opts.indexedDB` and `opts.IDBKeyRange` both default to respective browser implementations.
 
 ## blob.createWriteStream(opts, cb)
